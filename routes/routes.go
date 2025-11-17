@@ -16,5 +16,20 @@ func SetupRouter() *gin.Engine {
 	protected.Use(middleware.RequireAuth())
 	protected.GET("/loginWithToken", controllers.TokenCheck)
 
+	attendance := r.Group("/attendance")
+	attendance.Use(middleware.RequireAuth())
+
+	attendanceAdmin := attendance.Group("/")
+	attendanceAdmin.Use(middleware.RequireAdmin())
+
+	{
+		attendanceAdmin.POST("/mark", controllers.MarkAttendance)
+		attendanceAdmin.GET("/get/:studentID", controllers.GetAttendanceByID)
+	}
+
+	{
+		attendance.GET("/get", controllers.GetAttendance)
+	}
+
 	return r
 }

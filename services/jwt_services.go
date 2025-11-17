@@ -2,7 +2,6 @@ package services
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 
@@ -10,34 +9,31 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var SecretKey = []byte(os.Getenv("JWT_KEY"))
+var SecretKey []byte
 
-func jwtGenerator(id, class, name string) (string, error) {
-	fmt.Println("generating jwt")
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading.env file")
-		log.Fatal("Error loading .env file")
+func init() {
+	_ = godotenv.Load()
+	SecretKey = []byte(os.Getenv("JWT_KEY"))
+	if len(SecretKey) == 0 {
+		log.Fatal("JWT_KEY is missing from environment variables")
+	}
+}
+
+func jwtGenerator(id, class, role, name string) (string, error) {
+
+	claims := jwt.MapClaims{
+		"user_ID":    id,
+		"user_class": class,
+		"user_name":  name,
+		"role":       role,
 	}
 
-	// Access environment variables
-	var (
-		t *jwt.Token
-		s string
-	)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	t = jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"user_ID":    id,
-			"user_class": class,
-			"user_name":  name,
-		})
-	s, err = t.SignedString(SecretKey)
+	signed, err := token.SignedString(SecretKey)
 	if err != nil {
-		fmt.Println("failed to generate token")
-		fmt.Println(err)
 		return "", errors.New("failed to generate token")
 	}
-	fmt.Println(s)
-	return s, nil
+
+	return signed, nil
 }

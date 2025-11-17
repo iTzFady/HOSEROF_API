@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
 	"HOSEROF_API/services"
@@ -26,10 +25,6 @@ func RequireAuth() gin.HandlerFunc {
 		} else {
 			tokenString = auth
 		}
-
-		if len(services.SecretKey) == 0 {
-			services.SecretKey = []byte(os.Getenv("JWT_KEY"))
-		}
 		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 			return services.SecretKey, nil
 		})
@@ -37,6 +32,8 @@ func RequireAuth() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
+
+		c.Set("user", token)
 
 		c.Next()
 	}
