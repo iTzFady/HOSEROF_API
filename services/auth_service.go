@@ -39,17 +39,17 @@ func LoginUser(login models.UserLogin) (*models.UserDataResponse, error) {
 	docSnap, err := docRef.Get(ctx)
 
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, errors.New("INVALID_CREDENTIALS")
 	}
 
 	var fsUser models.UserFirestore
 
 	if err := docSnap.DataTo(&fsUser); err != nil {
-		return nil, errors.New("failed to parse user data")
+		return nil, errors.New("INVALID_LOGIN_PAYLOAD")
 	}
 
 	if !CheckPasswordHash(fsUser.StudentPassword, login.StudentPassword) {
-		return nil, errors.New("invalid password")
+		return nil, errors.New("INVALID_CREDENTIALS")
 	}
 	token, err := jwtGenerator(fsUser.StudentID, fsUser.StudentClass, fsUser.Role, fsUser.StudentName)
 	if err != nil {

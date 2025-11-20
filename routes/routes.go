@@ -31,5 +31,20 @@ func SetupRouter() *gin.Engine {
 		attendance.GET("/get", controllers.GetAttendance)
 	}
 
+	exam := r.Group("/exam")
+	exam.Use(middleware.RequireAuth())
+
+	exam.GET("/list", controllers.ListExamsForStudent)
+	exam.GET("/:examID", controllers.GetExamForStudent)
+	exam.POST("/submit/:examID", controllers.SubmitExam)
+
+	examAdmin := exam.Group("/")
+	examAdmin.Use(middleware.RequireAdmin())
+
+	examAdmin.POST("/create", controllers.CreateExam)
+	examAdmin.GET("/submissions/:examID", controllers.GetSubmissionsForExam)
+	examAdmin.POST("/grade/:examID", controllers.GradeAnswer)
+	examAdmin.POST("/release/:examID", controllers.ReleaseResultsHandler)
+
 	return r
 }

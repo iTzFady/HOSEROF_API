@@ -11,7 +11,6 @@ import (
 
 func Signup(c *gin.Context) {
 	var body models.NewUser
-
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signup payload"})
 		return
