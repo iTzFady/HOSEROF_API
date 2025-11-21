@@ -46,5 +46,16 @@ func SetupRouter() *gin.Engine {
 	examAdmin.POST("/grade/:examID", controllers.GradeAnswer)
 	examAdmin.POST("/release/:examID", controllers.ReleaseResultsHandler)
 
+	curriculum := r.Group("/curriculum")
+	curriculum.Use(middleware.RequireAdmin())
+	curriculum.GET("/:id", controllers.GetCurriculumByID)
+	curriculum.GET("/class/:class_id", controllers.GetCurriculumsByClass)
+
+	curriculumAdmin := exam.Group("/")
+	curriculumAdmin.Use(middleware.RequireAdmin())
+	curriculumAdmin.POST("/upload", controllers.UpdateCurriculum)
+	curriculumAdmin.PUT("/:id", controllers.UpdateCurriculum)
+	curriculumAdmin.DELETE("/:id", controllers.DeleteCurriculum)
+
 	return r
 }
