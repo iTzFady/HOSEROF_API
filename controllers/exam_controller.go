@@ -62,7 +62,6 @@ func ListExamsForStudent(c *gin.Context) {
 	}
 
 	class := userClass
-	fmt.Println("Searching for class:", class)
 	exams, err := services.GetExamsForClass(class, studentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -16,6 +16,7 @@ func main() {
 	}
 
 	config.InitFirebase()
+	config.InitSupabase()
 	defer config.DB.Close()
 
 	fmt.Println("Server running on :3000")

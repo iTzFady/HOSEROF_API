@@ -18,42 +18,37 @@ func SetupRouter() *gin.Engine {
 
 	attendance := r.Group("/attendance")
 	attendance.Use(middleware.RequireAuth())
+	attendance.GET("/get", controllers.GetAttendance)
 
 	attendanceAdmin := attendance.Group("/")
+	attendanceAdmin.Use(middleware.RequireAuth())
 	attendanceAdmin.Use(middleware.RequireAdmin())
-
-	{
-		attendanceAdmin.POST("/mark", controllers.MarkAttendance)
-		attendanceAdmin.GET("/get/:studentID", controllers.GetAttendanceByID)
-	}
-
-	{
-		attendance.GET("/get", controllers.GetAttendance)
-	}
+	attendanceAdmin.POST("/mark", controllers.MarkAttendance)
+	attendanceAdmin.GET("/get/:studentID", controllers.GetAttendanceByID)
 
 	exam := r.Group("/exam")
 	exam.Use(middleware.RequireAuth())
-
 	exam.GET("/list", controllers.ListExamsForStudent)
 	exam.GET("/:examID", controllers.GetExamForStudent)
 	exam.POST("/submit/:examID", controllers.SubmitExam)
 
 	examAdmin := exam.Group("/")
+	examAdmin.Use(middleware.RequireAuth())
 	examAdmin.Use(middleware.RequireAdmin())
-
 	examAdmin.POST("/create", controllers.CreateExam)
 	examAdmin.GET("/submissions/:examID", controllers.GetSubmissionsForExam)
 	examAdmin.POST("/grade/:examID", controllers.GradeAnswer)
 	examAdmin.POST("/release/:examID", controllers.ReleaseResultsHandler)
 
 	curriculum := r.Group("/curriculum")
-	curriculum.Use(middleware.RequireAdmin())
-	curriculum.GET("/:id", controllers.GetCurriculumByID)
+	curriculum.Use(middleware.RequireAuth())
 	curriculum.GET("/class/:class_id", controllers.GetCurriculumsByClass)
 
-	curriculumAdmin := exam.Group("/")
+	curriculumAdmin := curriculum.Group("/")
+	curriculumAdmin.Use(middleware.RequireAuth())
 	curriculumAdmin.Use(middleware.RequireAdmin())
-	curriculumAdmin.POST("/upload", controllers.UpdateCurriculum)
+	curriculumAdmin.GET("/", controllers.GetAllCurriculums)
+	curriculumAdmin.POST("/upload", controllers.UploadCurriculum)
 	curriculumAdmin.PUT("/:id", controllers.UpdateCurriculum)
 	curriculumAdmin.DELETE("/:id", controllers.DeleteCurriculum)
 

@@ -27,7 +27,7 @@ func InitSupabaseStorage() error {
 func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, file multipart.File, header *multipart.FileHeader, userID string) (*models.Curriculum, error) {
 	ext := filepath.Ext(header.Filename)
 	uniqueFilename := fmt.Sprintf("%s_%s%s", req.ClassID, uuid.New().String(), ext)
-	storagePath := fmt.Sprintf("curriculum/%s/%s", req.ClassID, uniqueFilename)
+	storagePath := fmt.Sprintf("%s/%s", req.ClassID, uniqueFilename)
 
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
@@ -36,34 +36,32 @@ func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, f
 
 	fileReader := bytes.NewReader(fileBytes)
 
-	_, err = config.SupabaseStorage.UploadFile("curriculum", storagePath, fileReader)
+	_, err = config.SupabaseStorage.UploadFile("Curriculum", storagePath, fileReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload to supabase: %w", err)
 	}
 
-	resp := config.SupabaseStorage.GetPublicUrl("curriculum", storagePath)
+	resp := config.SupabaseStorage.GetPublicUrl("Curriculum", storagePath)
 	fileURL := resp.SignedURL
 
 	fileType := getFileType(ext)
 
 	curriculum := &models.Curriculum{
-		ID:          uuid.New().String(),
-		ClassID:     req.ClassID,
-		Title:       req.Title,
-		Description: req.Description,
-		FileType:    fileType,
-		FileURL:     fileURL,
-		FileName:    header.Filename,
-		FileSize:    header.Size,
-		Order:       req.Order,
-		CreatedBy:   userID,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:        uuid.New().String(),
+		ClassID:   req.ClassID,
+		Title:     req.Title,
+		FileType:  fileType,
+		FileURL:   fileURL,
+		FileName:  header.Filename,
+		FileSize:  header.Size,
+		CreatedBy: userID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	_, err = config.DB.Collection("curriculums").Doc(curriculum.ID).Set(ctx, curriculum)
 	if err != nil {
-		config.SupabaseStorage.RemoveFile("curriculum", []string{storagePath})
+		config.SupabaseStorage.RemoveFile("Curriculum", []string{storagePath})
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
@@ -75,8 +73,6 @@ func GetCurriculumsByClass(ctx context.Context, classID string) ([]models.Curric
 
 	iter := config.DB.Collection("curriculums").
 		Where("class_id", "==", classID).
-		OrderBy("order", firestore.Asc).
-		OrderBy("created_at", firestore.Asc).
 		Documents(ctx)
 
 	for {
@@ -103,7 +99,6 @@ func GetAllCurriculums(ctx context.Context) ([]models.Curriculum, error) {
 
 	iter := config.DB.Collection("curriculums").
 		OrderBy("class_id", firestore.Asc).
-		OrderBy("order", firestore.Asc).
 		Documents(ctx)
 
 	for {
@@ -125,27 +120,12 @@ func GetAllCurriculums(ctx context.Context) ([]models.Curriculum, error) {
 	return curriculums, nil
 }
 
-func GetCurriculumByID(ctx context.Context, id string) (*models.Curriculum, error) {
-	doc, err := config.DB.Collection("curriculums").Doc(id).Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("curriculum not found: %w", err)
-	}
-
-	var curriculum models.Curriculum
-	if err := doc.DataTo(&curriculum); err != nil {
-		return nil, fmt.Errorf("failed to parse curriculum: %w", err)
-	}
-
-	return &curriculum, nil
-}
-
 func UpdateCurriculum(ctx context.Context, id string, updates map[string]interface{}) error {
 	updates["updated_at"] = time.Now()
 
 	_, err := config.DB.Collection("curriculums").Doc(id).Update(ctx, []firestore.Update{
 		{Path: "title", Value: updates["title"]},
 		{Path: "description", Value: updates["description"]},
-		{Path: "order", Value: updates["order"]},
 		{Path: "updated_at", Value: updates["updated_at"]},
 	})
 
@@ -153,25 +133,28 @@ func UpdateCurriculum(ctx context.Context, id string, updates map[string]interfa
 }
 
 func DeleteCurriculum(ctx context.Context, id string) error {
-	curriculum, err := GetCurriculumByID(ctx, id)
+
+	doc, err := config.DB.Collection("curriculums").Doc(id).Get(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("curriculum not found: %w", err)
+	}
+
+	var curriculum models.Curriculum
+	if err := doc.DataTo(&curriculum); err != nil {
+		return fmt.Errorf("failed to parse curriculum: %w", err)
 	}
 
 	ext := filepath.Ext(curriculum.FileName)
 	filenameFromID := fmt.Sprintf("%s_%s%s", curriculum.ClassID, id, ext)
 	storagePath := fmt.Sprintf("curriculum/%s/%s", curriculum.ClassID, filenameFromID)
 
-	_, err = config.SupabaseStorage.RemoveFile("curriculum", []string{storagePath})
-	if err != nil {
+	if _, err = config.SupabaseStorage.RemoveFile("curriculum", []string{storagePath}); err != nil {
 		fmt.Printf("Warning: failed to delete file from Supabase: %v\n", err)
 	}
 
-	_, err = config.DB.Collection("curriculums").Doc(id).Delete(ctx)
-	if err != nil {
+	if _, err = config.DB.Collection("curriculums").Doc(id).Delete(ctx); err != nil {
 		return fmt.Errorf("failed to delete from firestore: %w", err)
 	}
-
 	return nil
 }
 

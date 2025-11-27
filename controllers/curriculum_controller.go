@@ -14,7 +14,6 @@ type UploadCurriculumBody struct {
 	ClassID     string `form:"class_id" binding:"required"`
 	Title       string `form:"title" binding:"required"`
 	Description string `form:"description"`
-	Order       int    `form:"order"`
 }
 
 func UploadCurriculum(c *gin.Context) {
@@ -41,10 +40,8 @@ func UploadCurriculum(c *gin.Context) {
 	}
 
 	req := models.UploadCurriculumRequest{
-		ClassID:     body.ClassID,
-		Title:       body.Title,
-		Description: body.Description,
-		Order:       body.Order,
+		ClassID: body.ClassID,
+		Title:   body.Title,
 	}
 
 	curriculum, err := services.UploadCurriculum(c.Request.Context(), req, file, header, userID)
@@ -82,15 +79,6 @@ func GetCurriculumsByClass(c *gin.Context) {
 }
 
 func GetAllCurriculums(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	role, ok := claims["role"].(string)
-
-	if !ok || role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
-		return
-	}
-
 	curriculums, err := services.GetAllCurriculums(c.Request.Context())
 	if err != nil {
 		log.Print(err)
@@ -105,27 +93,9 @@ func GetAllCurriculums(c *gin.Context) {
 	c.JSON(http.StatusOK, curriculums)
 }
 
-func GetCurriculumByID(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
-		return
-	}
-
-	curriculum, err := services.GetCurriculumByID(c.Request.Context(), id)
-	if err != nil {
-		log.Print(err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "curriculum not found"})
-		return
-	}
-
-	c.JSON(http.StatusOK, curriculum)
-}
-
 type UpdateCurriculumBody struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	Order       int    `json:"order"`
 }
 
 func UpdateCurriculum(c *gin.Context) {
@@ -144,7 +114,6 @@ func UpdateCurriculum(c *gin.Context) {
 	updates := map[string]interface{}{
 		"title":       body.Title,
 		"description": body.Description,
-		"order":       body.Order,
 	}
 
 	if err := services.UpdateCurriculum(c.Request.Context(), id, updates); err != nil {
