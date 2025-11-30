@@ -31,6 +31,8 @@ func SetupRouter() *gin.Engine {
 	exam.GET("/list", controllers.ListExamsForStudent)
 	exam.GET("/:examID", controllers.GetExamForStudent)
 	exam.POST("/submit/:examID", controllers.SubmitExam)
+	exam.GET("/result/:examID", controllers.GetReleasedResultForStudent)
+	exam.GET("/results", controllers.ListReleasedResults)
 
 	examAdmin := exam.Group("/")
 	examAdmin.Use(middleware.RequireAuth())

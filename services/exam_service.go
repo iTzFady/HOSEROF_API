@@ -310,3 +310,62 @@ func ReleaseResults(examID string) error {
 
 	return nil
 }
+func GetReleasedResult(examID, studentID string) (*models.Submission, error) {
+	ctx := context.Background()
+	client := config.DB
+
+	doc := client.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
+	snap, err := doc.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var sub models.Submission
+	if err := snap.DataTo(&sub); err != nil {
+		return nil, err
+	}
+
+	if !sub.Released {
+		return nil, errors.New("results not released yet")
+	}
+
+	return &sub, nil
+}
+func GetAllReleasedResultsForStudent(studentID string) ([]models.Submission, error) {
+	ctx := context.Background()
+	client := config.DB
+
+	examsSnap, err := client.Collection("exams").Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var results []models.Submission
+
+	for _, examDoc := range examsSnap {
+		examID := examDoc.Ref.ID
+
+		subSnap, err := client.Collection("exams").
+			Doc(examID).
+			Collection("submissions").
+			Doc(studentID).
+			Get(ctx)
+
+		if err != nil {
+			continue
+		}
+
+		var sub models.Submission
+		if err := subSnap.DataTo(&sub); err != nil {
+			continue
+		}
+
+		if sub.Released {
+			sub.StudentID = studentID
+			sub.FinalScore = sub.AutoScore + sub.ManualScore
+			results = append(results, sub)
+		}
+	}
+
+	return results, nil
+}

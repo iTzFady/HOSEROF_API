@@ -155,3 +155,32 @@ func ReleaseResultsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
+
+func GetReleasedResultForStudent(c *gin.Context) {
+	token := c.MustGet("user").(*jwt.Token)
+	claims := token.Claims.(jwt.MapClaims)
+	studentID := claims["user_ID"].(string)
+
+	examID := c.Param("examID")
+
+	result, err := services.GetReleasedResult(examID, studentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+func ListReleasedResults(c *gin.Context) {
+	token := c.MustGet("user").(*jwt.Token)
+	claims := token.Claims.(jwt.MapClaims)
+	studentID := claims["user_ID"].(string)
+
+	results, err := services.GetAllReleasedResultsForStudent(studentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load results"})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}
