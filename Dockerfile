@@ -1,4 +1,4 @@
-FROM golang:1.22 AS builder
+FROM golang:1.25.4 AS builder
 
 WORKDIR /app
 
@@ -18,3 +18,4 @@ COPY --from=builder /app/server .
 EXPOSE 3000
 
 CMD ["./server"]
+
