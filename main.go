@@ -26,7 +26,7 @@ func main() {
 
 	fmt.Println("Server running on :", port)
 	router := routes.SetupRouter()
-	if err := router.Run(":" + port); err != nil {
+	if err := router.Run("0.0.0.0:" + port); err != nil {
 		log.Fatal("server failed:", err)
 	}
 }
