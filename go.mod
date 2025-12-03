@@ -1,4 +1,4 @@
-module HOSEROF_API
+module github.com/iTzFady/HOSEROF_API
 
 go 1.25.0
 
