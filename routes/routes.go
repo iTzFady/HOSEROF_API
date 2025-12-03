@@ -4,7 +4,7 @@ import (
 	"github.com/iTzFady/HOSEROF_API/controllers"
 	"github.com/iTzFady/HOSEROF_API/middleware"
 
-	"github.com/gin-contrib/cors"
+	// "github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 )
