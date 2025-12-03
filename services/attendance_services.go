@@ -1,8 +1,8 @@
 package services
 
 import (
-	"HOSEROF_API/config"
-	"HOSEROF_API/models"
+	"github.com/iTzFady/HOSEROF_API/config"
+	"github.com/iTzFady/HOSEROF_API/models"
 	"context"
 	"errors"
 	"time"
