@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"HOSEROF_API/services"
+	"github.com/iTzFady/HOSEROF_API/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
