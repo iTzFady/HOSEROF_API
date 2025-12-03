@@ -12,13 +12,13 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-	}))
+	// r.Use(cors.New(cors.Config{
+	// 	AllowOrigins:     []string{"*"},
+	// 	AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+	// 	AllowHeaders:     []string{"Authorization", "Content-Type"},
+	// 	ExposeHeaders:    []string{"Content-Length"},
+	// 	AllowCredentials: true,
+	// }))
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
