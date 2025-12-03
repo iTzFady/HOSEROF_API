@@ -1,8 +1,8 @@
 package main
 
 import (
-	"HOSEROF_API/config"
-	"HOSEROF_API/routes"
+	"github.com/iTzFady/HOSEROF_API/config"
+	"github.com/iTzFady/HOSEROF_API/routes"
 	"fmt"
 	"log"
 	"os"
