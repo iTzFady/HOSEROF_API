@@ -6,15 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("warning: .env not found or failed to load")
-	}
-
 	config.InitFirebase()
 	config.InitSupabase()
 	defer config.DB.Close()
