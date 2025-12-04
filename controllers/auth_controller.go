@@ -16,8 +16,8 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	if body.NewStudentID == "" || body.NewStudentPassword == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id and password required"})
+	if body.NewStudentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
 		return
 	}
 	if err := services.SignupUser(body); err != nil {
