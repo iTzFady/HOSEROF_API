@@ -125,7 +125,7 @@ func UpdateCurriculum(ctx context.Context, id string, updates map[string]interfa
 
 	_, err := config.DB.Collection("curriculums").Doc(id).Update(ctx, []firestore.Update{
 		{Path: "title", Value: updates["title"]},
-		{Path: "description", Value: updates["description"]},
+		{Path: "class_id", Value: updates["class_id"]},
 		{Path: "updated_at", Value: updates["updated_at"]},
 	})
 
