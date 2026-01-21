@@ -125,7 +125,7 @@ func GetStudentsByClass(classID string) ([]models.UserFirestore, error) {
 	ctx := context.Background()
 
 	iter := config.DB.Collection("students").
-		Where("classId", "==", classID).
+		Where("student_class", "==", classID).
 		Documents(ctx)
 
 	var students []models.UserFirestore
