@@ -13,8 +13,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type AttendanceService struct{}
-
 func MarkAttendance(studentID string, attended bool) error {
 	ctx := context.Background()
 
@@ -121,14 +119,15 @@ func GetAttendance(studentID string) (models.AttendanceResponse, error) {
 
 }
 
-func GetStudentsByClass(classID string) ([]models.UserFirestore, error) {
+func GetStudentsByClass(classID string, hideMarked bool) ([]models.UserClassList, error) {
 	ctx := context.Background()
 
 	iter := config.DB.Collection("students").
 		Where("student_class", "==", classID).
 		Documents(ctx)
 
-	var students []models.UserFirestore
+	var students []models.UserClassList
+	today := time.Now().Format("2006-01-02")
 
 	for {
 		doc, err := iter.Next()
@@ -139,14 +138,57 @@ func GetStudentsByClass(classID string) ([]models.UserFirestore, error) {
 			return nil, err
 		}
 
-		var s models.UserFirestore
+		var s models.UserClassList
 		if err := doc.DataTo(&s); err != nil {
 			return nil, err
 		}
 		s.StudentID = doc.Ref.ID
 
-		students = append(students, s)
+		if !hideMarked {
+			students = append(students, s)
+			continue
+		}
+
+		attendanceDoc := config.DB.
+			Collection("students").
+			Doc(s.StudentID).
+			Collection("attendance").
+			Doc(today)
+
+		_, err = attendanceDoc.Get(ctx)
+
+		if err == nil {
+			continue
+		}
+
+		if status.Code(err) == codes.NotFound {
+			students = append(students, s)
+			continue
+		}
+
+		return nil, err
+
 	}
 
 	return students, nil
+}
+
+func GetUserByID(userID string) (models.UserFirestore, error) {
+	ctx := context.Background()
+
+	doc, err := config.DB.Collection("students").Doc(userID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return models.UserFirestore{}, errors.New("user not found")
+		}
+		return models.UserFirestore{}, err
+	}
+
+	var user models.UserFirestore
+	if err := doc.DataTo(&user); err != nil {
+		return models.UserFirestore{}, err
+	}
+
+	user.StudentID = doc.Ref.ID
+	return user, nil
 }
