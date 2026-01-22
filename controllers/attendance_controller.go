@@ -115,13 +115,14 @@ func GetAttendanceByID(c *gin.Context) {
 
 func GetStudentsByClass(c *gin.Context) {
 	classID := c.Param("classId")
+	hideMarkedToday := c.Query("hideMarkedToday") == "true"
 
 	if classID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "classId is required"})
 		return
 	}
 
-	students, err := services.GetStudentsByClass(classID)
+	students, err := services.GetStudentsByClass(classID, hideMarkedToday)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get students"})
 		return
@@ -130,4 +131,25 @@ func GetStudentsByClass(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"students": students,
 	})
+}
+
+func GetUserByID(c *gin.Context) {
+	userID := c.Param("userId")
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required"})
+		return
+	}
+
+	user, err := services.GetUserByID(userID)
+	if err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
 }

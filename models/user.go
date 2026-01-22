@@ -23,6 +23,13 @@ type UserFirestore struct {
 	StudentGrade string `firestore:"student_grade"`
 	Role         string `firestore:"role"`
 }
+
+type UserClassList struct {
+	StudentID    string `firestore:"student_id"`
+	StudentName  string `firestore:"student_name"`
+	StudentGrade string `firestore:"student_grade"`
+}
+
 type UserDataResponse struct {
 	StudentToken string `json:"student_token"`
 	StudentId    string `json:"student_id"`
