@@ -128,9 +128,8 @@ func GetStudentsByClass(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"students": students,
-	})
+	c.JSON(http.StatusOK, students)
+
 }
 
 func GetUserByID(c *gin.Context) {
