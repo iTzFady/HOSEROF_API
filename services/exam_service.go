@@ -82,6 +82,41 @@ func GetExamsForClass(class string, studentID string) ([]models.Exam, error) {
 	return out, nil
 }
 
+func GetAllExams() ([]models.Exam, error) {
+	ctx := context.Background()
+
+	q := config.DB.Collection("exams")
+	iter := q.Documents(ctx)
+	var out []models.Exam
+	now := time.Now()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var e models.Exam
+		if err := doc.DataTo(&e); err != nil {
+			return nil, err
+		}
+
+		if now.Before(e.StartTime) {
+			continue
+		}
+		if now.After(e.EndTime) {
+			continue
+		}
+
+		out = append(out, e)
+	}
+
+	return out, nil
+}
+
 func GetExamQuestions(examID string, forStudent bool) ([]models.Question, error) {
 	ctx := context.Background()
 

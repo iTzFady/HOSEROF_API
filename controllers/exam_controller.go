@@ -76,6 +76,21 @@ func ListExamsForStudent(c *gin.Context) {
 	c.JSON(http.StatusOK, exams)
 }
 
+func ListAllExams(c *gin.Context) {
+
+	exams, err := services.GetAllExams()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if exams == nil {
+		exams = []models.Exam{}
+	}
+
+	c.JSON(http.StatusOK, exams)
+}
+
 func GetExamForStudent(c *gin.Context) {
 	examID := c.Param("examID")
 	qs, err := services.GetExamQuestions(examID, true)
