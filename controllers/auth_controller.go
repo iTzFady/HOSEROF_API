@@ -9,18 +9,38 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Signup(c *gin.Context) {
+func CreateStudent(c *gin.Context) {
 	var body models.NewUser
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signup payload"})
 		return
 	}
 
+	body.NewStudentRole = "student"
+
 	if body.NewStudentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
 		return
 	}
-	if err := services.SignupUser(body); err != nil {
+	if err := services.CreateStudent(body); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to signup", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": "Account Successfully Created"})
+}
+
+func CreateStaff(c *gin.Context) {
+	var body models.NewStaff
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signup payload"})
+		return
+	}
+
+	if body.ID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+		return
+	}
+	if err := services.CreateStaff(body); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to signup", "details": err.Error()})
 		return
 	}

@@ -132,6 +132,31 @@ func GetStudentsByClass(c *gin.Context) {
 
 }
 
+func MarkAttendanceBatch(c *gin.Context) {
+	var body []struct {
+		StudentID string `json:"studentId"`
+		Attended  bool   `json:"attended"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+
+	if len(body) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty payload"})
+		return
+	}
+
+	err := services.MarkAttendanceBatch(body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save attendance"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func GetUserByID(c *gin.Context) {
 	userID := c.Param("userId")
 

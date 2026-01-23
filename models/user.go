@@ -1,7 +1,8 @@
 package models
 
 type UserLogin struct {
-	StudentId string `json:"user_ID"`
+	ID       string `json:"user_ID"`
+	Password string `json:"password"`
 }
 
 type NewUser struct {
@@ -36,4 +37,21 @@ type UserDataResponse struct {
 	StudentName  string `json:"student_name"`
 	StudentClass string `json:"student_class"`
 	Role         string `json:"role"`
+}
+type NewStaff struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	PhoneNumber string `json:"phoneNumber"`
+	Class       string `json:"class"`
+	Role        string `json:"role"`
+	Password    string `json:"password"`
+}
+
+type StaffFirestore struct {
+	ID       string `firestore:"id"`
+	Name     string `firestore:"name"`
+	Class    string `firestore:"class"`
+	Phone    string `firestore:"phonenumber"`
+	Password string `firestore:"password"`
+	Role     string `firestore:"role"`
 }
