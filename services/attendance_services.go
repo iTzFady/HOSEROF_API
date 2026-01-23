@@ -173,6 +173,37 @@ func GetStudentsByClass(classID string, hideMarked bool) ([]models.UserClassList
 	return students, nil
 }
 
+func MarkAttendanceBatch(records []struct {
+	StudentID string `json:"studentId"`
+	Attended  bool   `json:"attended"`
+}) error {
+
+	ctx := context.Background()
+	batch := config.DB.Batch()
+	today := time.Now().Format("2006-01-02")
+
+	for _, r := range records {
+
+		if r.StudentID == "" {
+			continue
+		}
+
+		attendanceRef := config.DB.
+			Collection("students").
+			Doc(r.StudentID).
+			Collection("attendance").
+			Doc(today)
+
+		batch.Set(attendanceRef, map[string]interface{}{
+			"attended":  r.Attended,
+			"timestamp": firestore.ServerTimestamp,
+		}, firestore.MergeAll)
+	}
+
+	_, err := batch.Commit(ctx)
+	return err
+}
+
 func GetUserByID(userID string) (models.UserFirestore, error) {
 	ctx := context.Background()
 

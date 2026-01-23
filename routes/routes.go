@@ -26,8 +26,12 @@ func SetupRouter() *gin.Engine {
 		})
 	})
 
-	r.POST("/signup", controllers.Signup)
 	r.POST("/login", controllers.Login)
+
+	admin := r.Group("/")
+	admin.Use(middleware.RequireAuth(), middleware.RequireAdmin())
+	admin.POST("/create-student", controllers.CreateStudent)
+	admin.POST("/create-staff", controllers.CreateStaff)
 
 	protected := r.Group("/")
 	protected.Use(middleware.RequireAuth())
@@ -43,6 +47,7 @@ func SetupRouter() *gin.Engine {
 	attendanceAdmin.POST("/mark", controllers.MarkAttendance)
 	attendanceAdmin.GET("/get/:studentID", controllers.GetAttendanceByID)
 	attendanceAdmin.POST("/manual", controllers.MarkAttendanceManual)
+	attendanceAdmin.POST("/attendance/batch", controllers.MarkAttendanceBatch)
 	attendanceAdmin.GET("/classes/:classId", controllers.GetStudentsByClass)
 	attendanceAdmin.GET("profile/:userId", controllers.GetUserByID)
 

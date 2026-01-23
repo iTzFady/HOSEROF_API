@@ -5,10 +5,9 @@ import (
 	"HOSEROF_API/models"
 	"context"
 	"errors"
-	"fmt"
 )
 
-func SignupUser(newUser models.NewUser) error {
+func CreateStudent(newUser models.NewUser) error {
 	data := map[string]interface{}{
 		"student_id":          newUser.NewStudentID,
 		"student_name":        newUser.NewStudentName,
@@ -30,28 +29,71 @@ func SignupUser(newUser models.NewUser) error {
 	return nil
 }
 
+func CreateStaff(newStaff models.NewStaff) error {
+	hashed, nil := HashPassword(newStaff.Password)
+	data := map[string]interface{}{
+		"id":          newStaff.ID,
+		"name":        newStaff.Name,
+		"phonenumber": newStaff.PhoneNumber,
+		"class":       newStaff.Class,
+		"password":    hashed,
+		"role":        newStaff.Role,
+	}
+
+	_, err := config.DB.Collection("staff").
+		Doc(newStaff.ID).
+		Set(context.Background(), data)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func LoginUser(login models.UserLogin) (*models.UserDataResponse, error) {
 	ctx := context.Background()
-	docRef := config.DB.Collection("students").Doc(login.StudentId)
-	docSnap, err := docRef.Get(ctx)
+	studentDoc, err := config.DB.Collection("students").Doc(login.ID).Get(ctx)
 
-	var fsUser models.UserFirestore
+	if err == nil {
+		var fsUser models.UserFirestore
+		studentDoc.DataTo(&fsUser)
 
-	if err := docSnap.DataTo(&fsUser); err != nil {
-		return nil, errors.New("INVALID_LOGIN_PAYLOAD")
+		token, _ := jwtGenerator(fsUser.StudentID, fsUser.StudentClass, fsUser.Role, fsUser.StudentName)
+
+		return &models.UserDataResponse{
+			StudentToken: token,
+			StudentId:    fsUser.StudentID,
+			StudentName:  fsUser.StudentName,
+			StudentClass: fsUser.StudentClass,
+			Role:         fsUser.Role,
+		}, nil
 	}
 
-	token, err := jwtGenerator(fsUser.StudentID, fsUser.StudentClass, fsUser.Role, fsUser.StudentName)
+	if login.Password == "" {
+		return nil, errors.New("PASSWORD_REQUIRED")
+	}
+
+	staffDoc, err := config.DB.Collection("staff").Doc(login.ID).Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %v", err)
+		return nil, errors.New("INVALID_LOGIN")
 	}
 
-	resp := &models.UserDataResponse{
-		StudentToken: token,
-		StudentId:    fsUser.StudentID,
-		StudentName:  fsUser.StudentName,
-		StudentClass: fsUser.StudentClass,
-		Role:         fsUser.Role,
+	var staff models.StaffFirestore
+	staffDoc.DataTo(&staff)
+
+	if !CheckPasswordHash(staff.Password, login.Password) {
+		return nil, errors.New("INVALID_LOGIN")
 	}
-	return resp, nil
+
+	token, _ := jwtGenerator(staff.ID, staff.Class, staff.Role, staff.Name)
+
+	return &models.UserDataResponse{
+		StudentToken: token,
+		StudentId:    staff.ID,
+		StudentName:  staff.Name,
+		StudentClass: staff.Class,
+		Role:         staff.Role,
+	}, nil
+
 }
