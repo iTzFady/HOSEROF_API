@@ -1,10 +1,9 @@
 package controllers
 
 import (
+	"HOSEROF_API/middleware"
 	"HOSEROF_API/services"
 	"net/http"
-
-	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/gin-gonic/gin"
 )
@@ -75,9 +74,8 @@ func MarkAttendance(c *gin.Context) {
 // }
 
 func GetAttendance(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
 	resp, err := services.GetAttendance(studentID, c)
 	if err != nil {
@@ -120,7 +118,26 @@ func GetStudentsByClass(c *gin.Context) {
 		return
 	}
 
-	students, err := services.GetStudentsByClass(classID, hideMarkedToday, c)
+	students, err := services.GetStudents(classID, hideMarkedToday, c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get students", "code": "SERVER_ERROR"})
+		return
+	}
+
+	c.JSON(http.StatusOK, students)
+
+}
+
+func GetStudentsForTeacher(c *gin.Context) {
+	claims := c.MustGet("claims").(*middleware.Claims)
+	classID := claims.UserClass
+
+	if classID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classId is required", "code": "ID_REQUIRED"})
+		return
+	}
+
+	students, err := services.GetStudents(classID, false, c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get students", "code": "SERVER_ERROR"})
 		return
@@ -153,4 +170,27 @@ func MarkAttendanceBatch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func GetClassAttendanceSummary(c *gin.Context) {
+	claims := c.MustGet("claims").(*middleware.Claims)
+	classID := claims.UserClass
+	if classID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "classId is required",
+			"code":  "ID_REQUIRED",
+		})
+		return
+	}
+
+	resp, err := services.GetClassAttendanceSummary(classID, c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get attendance summary",
+			"code":  "SERVER_ERROR",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

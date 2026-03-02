@@ -26,9 +26,9 @@ type UserFirestore struct {
 }
 
 type UserClassList struct {
-	StudentID    string `firestore:"student_id"`
-	StudentName  string `firestore:"student_name"`
-	StudentGrade string `firestore:"student_grade"`
+	StudentID          string `firestore:"student_id"`
+	StudentName        string `firestore:"student_name"`
+	StudentPhoneNumber string `firestore:"student_phonenumber"`
 }
 
 type UserDataResponse struct {

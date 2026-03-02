@@ -165,8 +165,8 @@ func GetAttendance(studentID string, c *gin.Context) (models.AttendanceResponse,
 
 }
 
-// GetStudentsByClass retrieves students in a specific class with optional hiding of already marked attendance.
-func GetStudentsByClass(classID string, hideMarked bool, c *gin.Context) ([]models.UserClassList, error) {
+// GetStudents retrieves students in a specific class with optional hiding of already marked attendance.
+func GetStudents(classID string, hideMarked bool, c *gin.Context) ([]models.UserClassList, error) {
 	ctx := c.Request.Context()
 	services := config.GetServices(c)
 
@@ -253,4 +253,84 @@ func MarkAttendanceBatch(records []struct {
 
 	_, err := batch.Commit(ctx)
 	return err
+}
+
+func GetClassAttendanceSummary(classID string, c *gin.Context) ([]models.StudentAttendanceSummary, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	// Get all students in class
+	iter := services.Firebase.DB.Collection("students").
+		Where("student_class", "==", classID).
+		Documents(ctx)
+
+	result := []models.StudentAttendanceSummary{}
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var student models.UserFirestore
+		if err := doc.DataTo(&student); err != nil {
+			return nil, err
+		}
+
+		studentID := doc.Ref.ID
+
+		// Get attendance records
+		attIter := services.Firebase.DB.
+			Collection("students").
+			Doc(studentID).
+			Collection("attendance").
+			Documents(ctx)
+
+		total := 0
+		attendedCount := 0
+
+		for {
+			attDoc, err := attIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+
+			var rec models.AttendanceRecord
+			if err := attDoc.DataTo(&rec); err != nil {
+				return nil, err
+			}
+
+			total++
+			if rec.Attended {
+				attendedCount++
+			}
+		}
+
+		absent := total - attendedCount
+
+		var percentage float64
+		if total > 0 {
+			percentage = float64(attendedCount) / float64(total) * 100
+		}
+
+		result = append(result, models.StudentAttendanceSummary{
+			StudentID:  studentID,
+			Name:       student.StudentName,
+			Class:      student.StudentClass,
+			Grade:      student.StudentGrade,
+			Phone:      student.StudentPhone,
+			TotalDays:  total,
+			Attended:   attendedCount,
+			Absent:     absent,
+			Percentage: percentage,
+		})
+	}
+
+	return result, nil
 }

@@ -103,8 +103,8 @@ func main() {
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           router,
-		ReadTimeout:       20 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 8 * time.Second,
 	}

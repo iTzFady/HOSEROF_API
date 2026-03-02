@@ -39,6 +39,7 @@ func SetupRouter(svc *config.Services) *gin.Engine {
 
 	admin := r.Group("/admin")
 	admin.Use(middleware.RequireAuth(svc.JWTSecret), middleware.RequireAdmin())
+	admin.GET("/", controllers.GetAdminDashboard)
 	//Admin Users Management Endpoints
 	users := admin.Group("/users")
 	users.POST("/create-student", controllers.CreateStudent)
@@ -71,6 +72,16 @@ func SetupRouter(svc *config.Services) *gin.Engine {
 	curriculumAdmin.POST("/upload-curriculum", controllers.UploadCurriculum)
 	curriculumAdmin.PUT("/:id", controllers.UpdateCurriculum)
 	curriculumAdmin.DELETE("/:id", controllers.DeleteCurriculum)
+
+	teachers := r.Group("/teachers")
+	teachers.Use(middleware.RequireAuth(svc.JWTSecret), middleware.RequireTeacher())
+	teachers.GET("/", controllers.GetTeacherDashboard)
+	classStudents := teachers.Group("/students")
+	classStudents.GET("/", controllers.GetStudentsForTeacher)
+	classStudents.GET("/attendance/:studentID", controllers.GetAttendanceByID)
+	classStudents.GET("/class", controllers.GetClassAttendanceSummary)
+	results := teachers.Group("/results")
+	results.GET("/:student_id", controllers.GetStudentSubmittedExams)
 
 	students := r.Group("/students")
 	students.Use(middleware.RequireAuth(svc.JWTSecret))
