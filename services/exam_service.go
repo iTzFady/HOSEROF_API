@@ -1,23 +1,73 @@
+/*
+================================================================================
+HOSEROF_API - Exam Services
+================================================================================
+
+Description:
+This package provides service-level functions for creating, managing, and
+submitting exams within the HosErof system. It also handles retrieving
+exam questions, managing submissions, releasing results, and calculating
+student scores. All exam-related data is stored in Firebase Firestore.
+
+Responsibilities:
+1. CreateExam                    - Creates a new exam and its questions.
+2. GetExamsForClass              - Retrieves active exams for a student.
+3. GetAllExamsForAdmin            - Retrieves all exams for administrative purposes.
+4. GetExamQuestions              - Fetches exam questions, optionally hiding correct answers for students.
+5. SubmitExam                    - Records a student's submission, auto-grading MCQ and TF questions.
+6. GetSubmission                  - Retrieves a specific student's submission.
+7. GetAllSubmissions              - Retrieves all submissions for an exam.
+8. ReleaseResults                 - Releases results for all students after exam ends.
+9. DeleteExam                     - Deletes an exam along with its questions and submissions.
+10. GetReleasedResult             - Retrieves detailed results for a student after release.
+11. GetAllReleasedResultsForStudent - Retrieves summaries of all released exams for a student.
+
+Usage Notes:
+- All functions require a Gin context (`*gin.Context`) to extract services.
+- Exams and submissions are stored in Firestore:
+    - Collection: "exams"
+    - Subcollections: "questions" and "submissions"
+- Only MCQ and True/False questions are automatically graded.
+- ReleaseResults must be called after the exam's EndTime to release grades.
+- Timestamps are based on `time.Now()` in the local timezone.
+
+Error Handling:
+- Returns descriptive errors for invalid operations such as:
+    - Exam not started / ended
+    - Already submitted
+    - Results not released yet
+- Firestore errors are propagated for logging or client response.
+
+Security Notes:
+- Correct answers are hidden from students in `GetExamQuestions`.
+- Results can only be retrieved after they are released.
+
+================================================================================
+*/
+
 package services
 
 import (
 	"HOSEROF_API/config"
 	"HOSEROF_API/models"
-	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/gin-gonic/gin"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func CreateExam(exam models.Exam, questions []models.Question) (string, error) {
-	ctx := context.Background()
-	exams := config.DB.Collection("exams")
+// CreateExam creates a new exam document with associated questions in Firestore.
+func CreateExam(exam models.Exam, questions []models.Question, c *gin.Context) (string, error) {
+	services := config.GetServices(c)
+	ctx := c.Request.Context()
+	exams := services.Firebase.DB.Collection("exams")
 	doc := exams.NewDoc()
 	exam.ExamID = doc.ID
 	exam.CreatedAt = time.Now()
@@ -27,7 +77,7 @@ func CreateExam(exam models.Exam, questions []models.Question) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	// Create questions subcollection
 	for _, q := range questions {
 		if q.QID == "" {
 			q.QID = doc.Collection("questions").NewDoc().ID
@@ -41,10 +91,12 @@ func CreateExam(exam models.Exam, questions []models.Question) (string, error) {
 	return doc.ID, nil
 }
 
-func GetExamsForClass(class string, studentID string) ([]models.Exam, error) {
-	ctx := context.Background()
+// GetExamsForClass returns active exams for a student in a class, excluding already submitted exams.
+func GetExamsForClass(class string, studentID string, c *gin.Context) ([]models.Exam, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	q := config.DB.Collection("exams").
+	q := services.Firebase.DB.Collection("exams").
 		Where("class", "==", class)
 	iter := q.Documents(ctx)
 	var out []models.Exam
@@ -63,14 +115,14 @@ func GetExamsForClass(class string, studentID string) ([]models.Exam, error) {
 		if err := doc.DataTo(&e); err != nil {
 			return nil, err
 		}
-
+		// Filter exams by current time
 		if now.Before(e.StartTime) {
 			continue
 		}
 		if now.After(e.EndTime) {
 			continue
 		}
-
+		// Skip if student already submitted
 		subSnap, err := doc.Ref.Collection("submissions").Doc(studentID).Get(ctx)
 		if err == nil && subSnap.Exists() {
 			continue
@@ -82,14 +134,13 @@ func GetExamsForClass(class string, studentID string) ([]models.Exam, error) {
 	return out, nil
 }
 
-func GetAllExams() ([]models.Exam, error) {
-	ctx := context.Background()
+// GetAllExamsForAdmin returns all exams for admin purposes.
+func GetAllExamsForAdmin(c *gin.Context) ([]models.Exam, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	q := config.DB.Collection("exams")
-	iter := q.Documents(ctx)
+	iter := services.Firebase.DB.Collection("exams").Documents(ctx)
 	var out []models.Exam
-	now := time.Now()
-
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -104,23 +155,18 @@ func GetAllExams() ([]models.Exam, error) {
 			return nil, err
 		}
 
-		if now.Before(e.StartTime) {
-			continue
-		}
-		if now.After(e.EndTime) {
-			continue
-		}
-
 		out = append(out, e)
 	}
 
 	return out, nil
 }
 
-func GetExamQuestions(examID string, forStudent bool) ([]models.Question, error) {
-	ctx := context.Background()
+// GetExamQuestions retrieves exam questions; hides correct answers if forStudent is true.
+func GetExamQuestions(examID string, forStudent bool, c *gin.Context) ([]models.Question, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	qIter := config.DB.Collection("exams").
+	qIter := services.Firebase.DB.Collection("exams").
 		Doc(examID).
 		Collection("questions").
 		OrderBy("qid", firestore.Asc).
@@ -141,7 +187,7 @@ func GetExamQuestions(examID string, forStudent bool) ([]models.Question, error)
 		if err := doc.DataTo(&q); err != nil {
 			return nil, err
 		}
-
+		// Hide correct answers for students
 		if forStudent {
 			q.CorrectAnswer = ""
 		}
@@ -152,10 +198,12 @@ func GetExamQuestions(examID string, forStudent bool) ([]models.Question, error)
 	return qs, nil
 }
 
-func SubmitExam(examID string, studentID string, answers map[string]models.Answer) error {
-	ctx := context.Background()
-	examDoc := config.DB.Collection("exams").Doc(examID)
+// SubmitExam records student's answers, auto-grading MCQ and True/False questions.
+func SubmitExam(examID string, studentID string, answers map[string]models.Answer, c *gin.Context) error {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
+	examDoc := services.Firebase.DB.Collection("exams").Doc(examID)
 	snap, err := examDoc.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -181,7 +229,7 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 	if err == nil && existsSnap.Exists() {
 		return errors.New("already submitted")
 	}
-
+	// Build map of questions for auto-scoring
 	qIter := examDoc.Collection("questions").Documents(ctx)
 	correctMap := make(map[string]models.Question)
 	for {
@@ -196,7 +244,6 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 	}
 
 	var autoScore float64 = 0
-	var manualScore float64 = 0
 	for qid, ans := range answers {
 		q, ok := correctMap[qid]
 		if !ok {
@@ -223,17 +270,12 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 		}
 	}
 
-	final := autoScore + manualScore
-
 	submission := models.Submission{
 		StudentID:   studentID,
 		StartedAt:   now,
 		SubmittedAt: now,
 		Answers:     answers,
-		AutoScore:   autoScore,
-		ManualScore: manualScore,
-		FinalScore:  final,
-		Graded:      false,
+		FinalScore:  autoScore,
 		Released:    false,
 	}
 
@@ -245,9 +287,12 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 	return nil
 }
 
-func GetSubmission(examID, studentID string) (models.Submission, error) {
-	ctx := context.Background()
-	doc := config.DB.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
+// GetSubmission retrieves a single student's submission for an exam.
+func GetSubmission(examID, studentID string, c *gin.Context) (models.Submission, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	doc := services.Firebase.DB.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
 	snap, err := doc.Get(ctx)
 	if err != nil {
 		return models.Submission{}, err
@@ -259,10 +304,12 @@ func GetSubmission(examID, studentID string) (models.Submission, error) {
 	return s, nil
 }
 
-func GetAllSubmissions(examID string) ([]models.Submission, error) {
-	ctx := context.Background()
+// GetAllSubmissions retrieves all submissions for a given exam.
+func GetAllSubmissions(examID string, c *gin.Context) ([]models.Submission, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	iter := config.DB.Collection("exams").
+	iter := services.Firebase.DB.Collection("exams").
 		Doc(examID).
 		Collection("submissions").
 		Documents(ctx)
@@ -289,73 +336,101 @@ func GetAllSubmissions(examID string) ([]models.Submission, error) {
 	return out, nil
 }
 
-func GradeWrittenAnswer(examID, studentID, qid string, score float64) error {
-	ctx := context.Background()
-	subRef := config.DB.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
+// ReleaseResults marks an exam and all submissions as released after exam ends.
+func ReleaseResults(examID string, c *gin.Context) error {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	snap, err := subRef.Get(ctx)
+	examRef := services.Firebase.DB.Collection("exams").Doc(examID)
+
+	snap, err := examRef.Get(ctx)
 	if err != nil {
 		return err
 	}
-	var s models.Submission
-	if err := snap.DataTo(&s); err != nil {
+
+	var exam models.Exam
+	if err := snap.DataTo(&exam); err != nil {
 		return err
 	}
 
-	ans, ok := s.Answers[qid]
-	if !ok {
-		return errors.New("question not found in submission")
+	if time.Now().Before(exam.EndTime) {
+		return errors.New("cannot release before exam ends")
 	}
-
-	ans.ManualScore = score
-	s.Answers[qid] = ans
-
-	var manualSum float64
-	for _, a := range s.Answers {
-		manualSum += a.ManualScore
-	}
-	s.ManualScore = manualSum
-	s.FinalScore = s.AutoScore + s.ManualScore
-	s.Graded = true
-
-	_, err = subRef.Set(ctx, s, firestore.MergeAll)
-	return err
-}
-
-func ReleaseResults(examID string) error {
-	ctx := context.Background()
-	examRef := config.DB.Collection("exams").Doc(examID)
-	_, err := examRef.Update(ctx, []firestore.Update{
+	// Mark exam released
+	_, err = examRef.Update(ctx, []firestore.Update{
 		{Path: "released", Value: true},
 	})
 	if err != nil {
 		return err
 	}
-
-	subs := examRef.Collection("submissions").Documents(ctx)
+	// Mark all submissions released
+	iter := examRef.Collection("submissions").Documents(ctx)
 	for {
-		d, err := subs.Next()
+		d, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			break
 		}
-		_, _ = d.Ref.Update(ctx, []firestore.Update{
+		d.Ref.Update(ctx, []firestore.Update{
 			{Path: "released", Value: true},
 		})
 	}
 
 	return nil
 }
-func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
-	ctx := context.Background()
-	client := config.DB
 
-	examDoc := client.Collection("exams").Doc(examID)
+// DeleteExam deletes an exam, its questions, and submissions.
+func DeleteExam(examID string, c *gin.Context) error {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	examRef := services.Firebase.DB.Collection("exams").Doc(examID)
+
+	// Delete questions
+	qIter := examRef.Collection("questions").Documents(ctx)
+	for {
+		doc, err := qIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+		doc.Ref.Delete(ctx)
+	}
+
+	// Delete submissions
+	sIter := examRef.Collection("submissions").Documents(ctx)
+	for {
+		doc, err := sIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+		doc.Ref.Delete(ctx)
+	}
+
+	_, err := examRef.Delete(ctx)
+	return err
+}
+
+// GetReleasedResult returns a detailed result for a student after the exam is released.
+func GetReleasedResult(examID, studentID string, c *gin.Context) (*models.ResultDetail, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	examDoc := services.Firebase.DB.Collection("exams").Doc(examID)
 	examSnap, err := examDoc.Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("exam not found: %w", err)
 	}
 	var exam models.Exam
 	if err := examSnap.DataTo(&exam); err != nil {
+		log.Print(err)
 		return nil, err
 	}
 
@@ -366,6 +441,7 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 	subDoc := examDoc.Collection("submissions").Doc(studentID)
 	subSnap, err := subDoc.Get(ctx)
 	if err != nil {
+		log.Print(err)
 		return nil, fmt.Errorf("submission not found: %w", err)
 	}
 	var sub models.Submission
@@ -396,7 +472,6 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 		totalPoints += q.Points
 	}
 
-	reviews := make([]models.QuestionReview, 0, len(questions))
 	correctCount := 0
 	wrongCount := 0
 
@@ -432,26 +507,9 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 			wrongCount++
 		}
 
-		var correctAnsForReturn string
-		if !isCorrect {
-			correctAnsForReturn = q.CorrectAnswer
-		}
-
-		reviews = append(reviews, models.QuestionReview{
-			QID:           q.QID,
-			Type:          string(q.Type),
-			QuestionText:  q.QuestionText,
-			Options:       q.Options,
-			StudentAnswer: studentResp,
-			CorrectAnswer: correctAnsForReturn,
-			IsCorrect:     isCorrect,
-			PointsAwarded: awarded,
-			MaxPoints:     q.Points,
-			ImageURL:      q.ImageURL,
-		})
 	}
 
-	finalScore := sub.AutoScore + sub.ManualScore
+	finalScore := sub.AutoScore
 	var percentage float64
 	if totalPoints > 0 {
 		percentage = (finalScore / totalPoints) * 100
@@ -469,18 +527,18 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 	result := models.ResultDetail{
 		Exam:       exam,
 		Submission: sub,
-		Reviews:    reviews,
 		Stats:      stats,
 	}
 
 	return &result, nil
 }
 
-func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, error) {
-	ctx := context.Background()
-	client := config.DB
+// GetAllReleasedResultsForStudent returns summaries of all released results for a student.
+func GetAllReleasedResultsForStudent(studentID string, c *gin.Context) ([]models.ResultSummary, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
 
-	examsSnap, err := client.Collection("exams").Documents(ctx).GetAll()
+	examsSnap, err := services.Firebase.DB.Collection("exams").Documents(ctx).GetAll()
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +553,7 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 			continue
 		}
 
-		subSnap, err := client.Collection("exams").
+		subSnap, err := services.Firebase.DB.Collection("exams").
 			Doc(examID).
 			Collection("submissions").
 			Doc(studentID).
@@ -518,7 +576,7 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 		correct := 0
 		wrong := 0
 
-		qsSnap, _ := client.Collection("exams").Doc(examID).Collection("questions").Documents(ctx).GetAll()
+		qsSnap, _ := services.Firebase.DB.Collection("exams").Doc(examID).Collection("questions").Documents(ctx).GetAll()
 		for _, q := range qsSnap {
 			var qq models.Question
 			q.DataTo(&qq)
@@ -531,33 +589,210 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 				continue
 			}
 
-			if qq.Type == models.WRITTEN {
-				if ans.AutoScore+ans.ManualScore > 0 {
-					correct++
-				} else {
-					wrong++
-				}
+			if ans.Response == qq.CorrectAnswer {
+				correct++
 			} else {
-				if ans.Response == qq.CorrectAnswer {
-					correct++
-				} else {
-					wrong++
-				}
+				wrong++
 			}
+
 		}
 
-		finalScore := sub.AutoScore + sub.ManualScore
-		percentage := (finalScore / totalPoints) * 100.0
+		percentage := (sub.AutoScore / totalPoints) * 100.0
 
 		results = append(results, models.ResultSummary{
 			ExamID:      examID,
 			Title:       exam.Title,
 			Date:        exam.StartTime,
-			FinalScore:  finalScore,
+			FinalScore:  sub.AutoScore,
 			TotalPoints: totalPoints,
 			Percentage:  percentage,
 		})
 	}
 
 	return results, nil
+}
+
+// SubmittedExamWithAnswers represents an exam submission with detailed answer analysis
+type SubmittedExamWithAnswers struct {
+	Exam           models.Exam             `json:"exam"`
+	Submission     models.Submission       `json:"submission"`
+	Questions      []models.Question       `json:"questions"`
+	AnswerAnalysis map[string]AnswerDetail `json:"answer_analysis"`
+	Stats          models.ResultStats      `json:"stats"`
+}
+
+// AnswerDetail provides information about a student's answer
+type AnswerDetail struct {
+	Question      models.Question `json:"question"`
+	StudentAnswer string          `json:"student_answer"`
+	CorrectAnswer string          `json:"correct_answer"`
+	IsCorrect     bool            `json:"is_correct"`
+	AutoScore     float64         `json:"auto_score"`
+	ManualScore   float64         `json:"manual_score"`
+}
+
+// SubmittedExamSummary represents a simple exam submission summary without detailed answers
+type SubmittedExamSummary struct {
+	Exam       models.Exam       `json:"exam"`
+	Submission models.Submission `json:"submission"`
+}
+
+// GetStudentSubmittedExams retrieves exam metadata for all exams submitted by a student
+func GetStudentSubmittedExams(studentID string, c *gin.Context) ([]models.Exam, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	// Get all exams
+	examsIter := services.Firebase.DB.Collection("exams").Documents(ctx)
+	var submittedExams []models.Exam
+
+	for {
+		examDoc, err := examsIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var exam models.Exam
+		if err := examDoc.DataTo(&exam); err != nil {
+			continue
+		}
+
+		// Check if student submitted this exam
+		subSnap, err := examDoc.Ref.Collection("submissions").Doc(studentID).Get(ctx)
+		if err != nil || !subSnap.Exists() {
+			continue // Student didn't submit this exam
+		}
+
+		// Only return exam metadata
+		submittedExams = append(submittedExams, exam)
+	}
+
+	return submittedExams, nil
+}
+
+// GetStudentExamResultDetails retrieves detailed results for a specific exam submission
+func GetStudentExamResultDetails(studentID, examID string, c *gin.Context) (*SubmittedExamWithAnswers, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	examDoc := services.Firebase.DB.Collection("exams").Doc(examID)
+	examSnap, err := examDoc.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("exam not found: %w", err)
+	}
+
+	var exam models.Exam
+	if err := examSnap.DataTo(&exam); err != nil {
+		return nil, err
+	}
+
+	// Check if student submitted this exam
+	subSnap, err := examDoc.Collection("submissions").Doc(studentID).Get(ctx)
+	if err != nil || !subSnap.Exists() {
+		return nil, errors.New("submission not found")
+	}
+
+	var submission models.Submission
+	if err := subSnap.DataTo(&submission); err != nil {
+		return nil, err
+	}
+
+	// Get all questions for this exam
+	qIter := examDoc.Collection("questions").Documents(ctx)
+	questions := make(map[string]models.Question)
+	var questionList []models.Question
+	var totalPoints float64
+
+	for {
+		qDoc, err := qIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+
+		var q models.Question
+		if err := qDoc.DataTo(&q); err != nil {
+			continue
+		}
+		questions[q.QID] = q
+		questionList = append(questionList, q)
+		totalPoints += q.Points
+	}
+
+	// Analyze answers
+	answerAnalysis := make(map[string]AnswerDetail)
+	correctCount := 0
+	wrongCount := 0
+
+	for qid, q := range questions {
+		ans, hasAnswer := submission.Answers[qid]
+		studentResp := ""
+		autoScore := 0.0
+		manualScore := 0.0
+		isCorrect := false
+
+		if hasAnswer {
+			studentResp = ans.Response
+			autoScore = ans.AutoScore
+			manualScore = ans.ManualScore
+		}
+
+		// Determine if answer is correct
+		switch q.Type {
+		case models.MCQ, models.TF:
+			stud := strings.TrimSpace(strings.ToLower(studentResp))
+			corr := strings.TrimSpace(strings.ToLower(fmt.Sprint(q.CorrectAnswer)))
+			if stud != "" && stud == corr {
+				isCorrect = true
+			}
+		default:
+			// For other types, check if points were awarded
+			if autoScore+manualScore >= q.Points {
+				isCorrect = true
+			}
+		}
+
+		if isCorrect {
+			correctCount++
+		} else {
+			wrongCount++
+		}
+
+		answerAnalysis[qid] = AnswerDetail{
+			Question:      q,
+			StudentAnswer: studentResp,
+			CorrectAnswer: q.CorrectAnswer,
+			IsCorrect:     isCorrect,
+			AutoScore:     autoScore,
+			ManualScore:   manualScore,
+		}
+	}
+
+	finalScore := submission.AutoScore
+	var percentage float64
+	if totalPoints > 0 {
+		percentage = (finalScore / totalPoints) * 100
+	}
+
+	stats := models.ResultStats{
+		TotalQuestions: len(questions),
+		Correct:        correctCount,
+		Wrong:          wrongCount,
+		TotalPoints:    totalPoints,
+		FinalScore:     finalScore,
+		Percentage:     percentage,
+	}
+
+	return &SubmittedExamWithAnswers{
+		Exam:           exam,
+		Submission:     submission,
+		Questions:      questionList,
+		AnswerAnalysis: answerAnalysis,
+		Stats:          stats,
+	}, nil
 }

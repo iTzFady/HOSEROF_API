@@ -2,15 +2,14 @@ package controllers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
+	"HOSEROF_API/middleware"
 	"HOSEROF_API/models"
 	"HOSEROF_API/services"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type CreateExamBody struct {
@@ -23,13 +22,12 @@ type CreateExamBody struct {
 }
 
 func CreateExam(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	adminID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	adminID := claims.ID
 
 	var body CreateExamBody
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
@@ -41,31 +39,22 @@ func CreateExam(c *gin.Context) {
 		EndTime:          body.EndTime,
 		CreatedBy:        adminID,
 	}
-	id, err := services.CreateExam(exam, body.Questions)
+	id, err := services.CreateExam(exam, body.Questions, c)
 	if err != nil {
-		log.Print(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create exam"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create exam", "code": "SERVER_ERROR"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "exam_id": id})
 }
 
 func ListExamsForStudent(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	userClass, ok := claims["user_class"].(string)
-	studentID := claims["user_ID"].(string)
-	if !ok || userClass == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "user_class missing from token",
-		})
-		return
-	}
+	claims := c.MustGet("claims").(*middleware.Claims)
+	userClass := claims.UserClass
+	studentID := claims.ID
 
-	class := userClass
-	exams, err := services.GetExamsForClass(class, studentID)
+	exams, err := services.GetExamsForClass(userClass, studentID, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exams for this student", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -78,9 +67,9 @@ func ListExamsForStudent(c *gin.Context) {
 
 func ListAllExams(c *gin.Context) {
 
-	exams, err := services.GetAllExams()
+	exams, err := services.GetAllExamsForAdmin(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get all exams", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -92,10 +81,25 @@ func ListAllExams(c *gin.Context) {
 }
 
 func GetExamForStudent(c *gin.Context) {
-	examID := c.Param("examID")
-	qs, err := services.GetExamQuestions(examID, true)
+	examID := c.Param("exam_id")
+	qs, err := services.GetExamQuestions(examID, true, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exam"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exam", "code": "SERVER_ERROR"})
+		return
+	}
+
+	if qs == nil {
+		qs = []models.Question{}
+	}
+
+	c.JSON(http.StatusOK, qs)
+}
+
+func GetExamForAdmin(c *gin.Context) {
+	examID := c.Param("exam_id")
+	qs, err := services.GetExamQuestions(examID, false, c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exam", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -111,14 +115,13 @@ type SubmitBody struct {
 }
 
 func SubmitExam(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
-	examID := c.Param("examID")
+	examID := c.Param("exam_id")
 	var body SubmitBody
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
@@ -130,9 +133,9 @@ func SubmitExam(c *gin.Context) {
 		}
 	}
 
-	err := services.SubmitExam(examID, studentID, parsed)
+	err := services.SubmitExam(examID, studentID, parsed, c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to submit exam", "code": "SERVER_ERROR"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
@@ -140,9 +143,9 @@ func SubmitExam(c *gin.Context) {
 
 func GetSubmissionsForExam(c *gin.Context) {
 	examID := c.Param("examID")
-	subs, err := services.GetAllSubmissions(examID)
+	subs, err := services.GetAllSubmissions(examID, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get submissions"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get submissions", "code": "SERVER_ERROR"})
 		return
 	}
 	if subs == nil {
@@ -157,56 +160,79 @@ type GradeRequest struct {
 	Score     float64 `json:"score"`
 }
 
-func GradeAnswer(c *gin.Context) {
-	var body GradeRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+func DeleteExam(c *gin.Context) {
+	examID := c.Param("exam_id")
+
+	if err := services.DeleteExam(examID, c); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete exam", "code": "SERVER_ERROR"})
 		return
 	}
-	examID := c.Param("examID")
-	if err := services.GradeWrittenAnswer(examID, body.StudentID, body.QID, body.Score); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func ReleaseResultsHandler(c *gin.Context) {
-	examID := c.Param("examID")
-	if err := services.ReleaseResults(examID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to release results"})
+func ReleaseResults(c *gin.Context) {
+	examID := c.Param("exam_id")
+	if err := services.ReleaseResults(examID, c); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to release results", "code": "SERVER_ERROR"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func GetReleasedResultForStudent(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
-	examID := c.Param("examID")
+	examID := c.Param("exam_id")
 
-	result, err := services.GetReleasedResult(examID, studentID)
+	result, err := services.GetReleasedResult(examID, studentID, c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "faild to get released results", "code": "SERVER_ERROR"})
 		return
 	}
 
 	c.JSON(http.StatusOK, result)
 }
-func ListReleasedResults(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
 
-	results, err := services.GetAllReleasedResultsForStudent(studentID)
+func ListReleasedResults(c *gin.Context) {
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
+
+	results, err := services.GetAllReleasedResultsForStudent(studentID, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load results"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load results", "code": "SERVER_ERROR"})
 		return
 	}
 	if results == nil {
 		results = []models.ResultSummary{}
 	}
 	c.JSON(http.StatusOK, results)
+}
+
+func GetStudentSubmittedExams(c *gin.Context) {
+	studentID := c.Param("student_id")
+	examID := c.Query("exam_id")
+
+	// If exam_id is provided, return detailed results for that exam
+	if examID != "" {
+		result, err := services.GetStudentExamResultDetails(studentID, examID, c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to get submitted exams", "code": "SERVER_ERROR"})
+			return
+		}
+		c.JSON(http.StatusOK, result)
+		return
+	}
+
+	// Otherwise, return list of submitted exams
+	exams, err := services.GetStudentSubmittedExams(studentID, c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get submitted exams", "code": "SERVER_ERROR"})
+		return
+	}
+	if exams == nil {
+		exams = []models.Exam{}
+	}
+	c.JSON(http.StatusOK, exams)
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RequireAdmin() gin.HandlerFunc {
+func RequireTeacher() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		value, exists := c.Get("claims")
@@ -20,9 +20,9 @@ func RequireAdmin() gin.HandlerFunc {
 
 		claims := value.(*Claims)
 
-		if claims.Role != "admin" {
+		if claims.Role != "teacher" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": "admin privileges required",
+				"error": "teacher privileges required",
 				"code":  "UNAUTHORIZED",
 			})
 			return
